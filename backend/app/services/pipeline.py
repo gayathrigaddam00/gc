@@ -11,10 +11,20 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+_LOGIN_URL_KEYWORDS = {
+    "login", "log-in", "signin", "sign-in", "auth",
+    "account", "session", "sso", "oauth",
+}
+
+
+def _url_looks_like_login(url: str) -> bool:
+    url_lower = url.lower()
+    return any(kw in url_lower for kw in _LOGIN_URL_KEYWORDS)
+
 
 def _needs_llm(h: heuristic.HeuristicResult) -> bool:
     if h.bot_protection_detected:
-        return False  # LLM can't help if the page itself is a bot-blocker
+        return False
     if not h.found:
         return True
     if h.confidence < settings.confidence_threshold:
@@ -23,6 +33,40 @@ def _needs_llm(h: heuristic.HeuristicResult) -> bool:
         return True
     if h.unusual_structure:
         return True
+    return False
+
+
+def _needs_headless(h: heuristic.HeuristicResult, static_error: str | None, url: str) -> bool:
+    """Decide whether headless scraping is worth attempting."""
+
+    # Static fetch failed entirely — headless might succeed
+    if static_error:
+        return True
+
+    # Bot protection detected by static — headless with stealth may bypass it
+    if h.bot_protection_detected:
+        return True
+
+    # Static found auth with good confidence — headless not needed
+    if h.found and h.confidence >= settings.confidence_threshold:
+        return False
+
+    # Page has forms but none are auth-related — headless won't change that
+    if h.low_confidence_reason == "forms_present_but_no_auth_signals":
+        return False
+
+    # No forms found — but if URL looks like a login page, JS may render it
+    if h.low_confidence_reason == "no_forms_found":
+        return _url_looks_like_login(url)
+
+    # SPA pattern — headless may render the full login form
+    if h.low_confidence_reason == "no_form_tags_spa_pattern":
+        return True
+
+    # Ambiguous multiple forms — headless may clarify
+    if h.low_confidence_reason == "ambiguous_multiple_forms":
+        return True
+
     return False
 
 
@@ -52,15 +96,13 @@ async def analyze(url: str) -> DetectionResult:
     if html:
         h = heuristic.detect(html)
         logger.info("static: url=%s conf=%.2f found=%s bot=%s", url, h.confidence, h.found, h.bot_protection_detected)
+        logger.info("static heuristic detail: reason=%s confidence=%.2f unusual=%s", h.low_confidence_reason, h.confidence, h.unusual_structure)
     else:
         h = heuristic.HeuristicResult()
         h.low_confidence_reason = f"static_fetch_failed: {static_error}"
 
-    # If static already found it with good confidence, skip headless
-    if h.found and h.confidence >= settings.confidence_threshold and not h.bot_protection_detected:
-        pass  # fall through to optional LLM check
-    else:
-        # --- Step 2: headless fallback ---
+    # --- Step 2: headless fallback (only if worthwhile) ---
+    if _needs_headless(h, static_error, url):
         logger.info("headless fallback: url=%s reason=%s", url, h.low_confidence_reason)
         html_headless, headless_error = await fetch_html_headless(url)
 
@@ -80,6 +122,8 @@ async def analyze(url: str) -> DetectionResult:
                     url=url, found=False, confidence=0.0, method="none",
                     error=headless_error or static_error,
                 )
+    else:
+        logger.info("headless skipped: url=%s reason=%s", url, h.low_confidence_reason)
 
     # --- Step 3: optional LLM fallback ---
     if settings.enable_llm_fallback and settings.anthropic_api_key and _needs_llm(h):

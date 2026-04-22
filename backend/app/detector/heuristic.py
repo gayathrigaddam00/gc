@@ -69,6 +69,24 @@ def _input_is_username(inp) -> bool:
     return any(kw in combined for kw in _USERNAME_NAMES)
 
 
+def _clean_snippet(form) -> str:
+    """Return a cleaned, readable version of the form HTML."""
+    import copy
+    form = copy.copy(form)
+
+    # Remove noisy tags entirely
+    for tag in form.find_all(["svg", "path", "script", "style"]):
+        tag.decompose()
+
+    # Remove noisy attributes, keep only meaningful ones
+    KEEP_ATTRS = {"type", "name", "id", "placeholder", "autocomplete", "action", "method", "value"}
+    for tag in form.find_all(True):
+        attrs_to_remove = [attr for attr in tag.attrs if attr not in KEEP_ATTRS]
+        for attr in attrs_to_remove:
+            del tag.attrs[attr]
+
+    return str(form)[:2000]
+
 def _score_form(form) -> tuple[float, list[str], str | None]:
     """Score a single <form> element."""
     score = 0.0
@@ -217,7 +235,8 @@ def detect(html: str) -> HeuristicResult:
         result.detected_fields = best_fields
         result.form_action = best_action
         result.candidate_count = len(scored)
-        result.html_snippet = str(best_form)[:2000]
+        # Fix: only set snippet when auth is actually found
+        result.html_snippet = _clean_snippet(best_form) if result.found else None
 
         if len(scored) > 1 and (scored[0][0] - scored[1][0]) < 0.15:
             result.low_confidence_reason = "ambiguous_multiple_forms"
@@ -234,21 +253,22 @@ def detect(html: str) -> HeuristicResult:
         result.detected_fields = fields
         result.low_confidence_reason = "no_form_tags_spa_pattern"
 
-        # Build a best-effort snippet from the first password or username input
-        anchor = None
-        for inp in soup.find_all("input"):
-            if inp.get("type") == "password" or _input_is_username(inp):
-                anchor = inp
-                break
-        if anchor:
-            # Walk up to find a meaningful container (up to 3 levels)
-            node = anchor
-            for _ in range(3):
-                if node.parent and node.parent.name not in ("body", "html", "[document]"):
-                    node = node.parent
-                else:
+        # Fix: only build snippet when auth is actually found
+        if result.found:
+            anchor = None
+            for inp in soup.find_all("input"):
+                if inp.get("type") == "password" or _input_is_username(inp):
+                    anchor = inp
                     break
-            result.html_snippet = str(node)[:2000]
+            if anchor:
+                # Walk up to find a meaningful container (up to 3 levels)
+                node = anchor
+                for _ in range(3):
+                    if node.parent and node.parent.name not in ("body", "html", "[document]"):
+                        node = node.parent
+                    else:
+                        break
+                result.html_snippet = _clean_snippet(node)
     else:
         result.low_confidence_reason = "no_forms_found"
 
