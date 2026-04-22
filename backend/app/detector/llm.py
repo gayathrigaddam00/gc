@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import anthropic
+from bs4 import BeautifulSoup
 from app.config import get_settings
 from app.detector.heuristic import HeuristicResult
 
@@ -28,8 +30,24 @@ async def detect_with_llm(
     """
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-    # Trim HTML to stay within a reasonable token budget
-    trimmed_html = html[:8000]
+    # --- Start HTML Cleanup ---
+    # 1. Parse the raw HTML
+    soup = BeautifulSoup(html, 'html.parser')
+    
+    # 2. Destroy non-structural tags that eat up tokens
+    for element in soup(["script", "style", "noscript", "meta", "link", "svg"]):
+        element.decompose()
+        
+    # 3. Extract just the body (fallback to the whole parsed soup if body is missing)
+    body_content = soup.body if soup.body else soup
+    
+    # 4. Convert back to string and compress whitespace to save tokens
+    cleaned_html = str(body_content)
+    cleaned_html = " ".join(cleaned_html.split()) 
+    
+    # 5. Apply the token-saving cutoff to the cleaned content
+    trimmed_html = cleaned_html[:8000]
+    # --- End HTML Cleanup ---
 
     hint_text = ""
     if heuristic_hint.low_confidence_reason:
@@ -50,14 +68,15 @@ HTML:
             messages=[{"role": "user", "content": user_message}],
         )
 
-        import json
         raw = message.content[0].text.strip()
+        
         # Strip markdown code fences if present
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
-        return json.loads(raw)
+        
+        return json.loads(raw.strip())
 
     except Exception as e:
         return {
