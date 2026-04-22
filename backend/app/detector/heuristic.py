@@ -212,7 +212,7 @@ def detect(html: str) -> HeuristicResult:
         scored.sort(key=lambda x: x[0], reverse=True)
         best_score, best_fields, best_action, best_form = scored[0]
 
-        result.found = best_score > 0
+        result.found = best_score >= 0.4
         result.confidence = best_score
         result.detected_fields = best_fields
         result.form_action = best_action
@@ -229,7 +229,7 @@ def detect(html: str) -> HeuristicResult:
     score, fields, _ = _score_formless(soup)
 
     if score > 0:
-        result.found = True
+        result.found = score >= 0.4
         result.confidence = score
         result.detected_fields = fields
         result.low_confidence_reason = "no_form_tags_spa_pattern"
