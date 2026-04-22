@@ -9,6 +9,9 @@ const SAMPLE_URLS = [
   { label: "PyPI", url: "https://pypi.org/account/login/" },
   { label: "MediaWiki", url: "https://www.mediawiki.org/w/index.php?title=Special:UserLogin" },
   { label: "Docker Hub", url: "https://hub.docker.com/login" },
+  {label: "Facebook", url:"https://www.facebook.com/?_rdr"},
+  {label :"Leetcode", url:"https://leetcode.com/accounts/login"},
+  {label:"Linkedin",url:"https://www.linkedin.com/signup"}
 ];
 
 const METHOD_LABEL: Record<string, string> = {
@@ -362,10 +365,6 @@ export default function ClientPage() {
         )}
       </main>
 
-      <footer style={styles.footer}>
-        AuthScraper — AI Engineer Technical Assessment &nbsp;·&nbsp;
-        <a href="/docs" target="_blank" style={{ color: "#6366f1" }}>API Docs (Swagger)</a>
-      </footer>
 
       {/* Inline keyframes for spinner */}
       <style>{`
