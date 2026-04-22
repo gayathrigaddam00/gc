@@ -74,11 +74,9 @@ def _clean_snippet(form) -> str:
     import copy
     form = copy.copy(form)
 
-    # Remove noisy tags entirely
     for tag in form.find_all(["svg", "path", "script", "style"]):
         tag.decompose()
 
-    # Remove noisy attributes, keep only meaningful ones
     KEEP_ATTRS = {"type", "name", "id", "placeholder", "autocomplete", "action", "method", "value"}
     for tag in form.find_all(True):
         attrs_to_remove = [attr for attr in tag.attrs if attr not in KEEP_ATTRS]
@@ -95,36 +93,36 @@ def _score_form(form) -> tuple[float, list[str], str | None]:
     inputs = form.find_all("input")
     input_types = [i.get("type", "text").lower() for i in inputs]
 
-    # Password field — strongest signal
+    #Password field — strongest signal
     if "password" in input_types:
         score += 0.4
         fields.append("password")
 
-    # Username/email in same form
+    #Username/email in same form
     for inp in inputs:
         if _input_is_username(inp):
             score += 0.2
             fields.append("username_or_email")
             break
 
-    # Form action
+    #Form action
     action = (form.get("action") or "").lower()
     if any(kw in action for kw in _FORM_ACTION_KEYWORDS):
         score += 0.15
 
-    # Form id/class
+    #Form id/class
     form_meta = (" ".join(form.get("class", [])) + " " + (form.get("id") or "")).lower()
     if any(kw in form_meta for kw in _FORM_ID_KEYWORDS):
         score += 0.1
 
-    # Submit button text
+    #Submit button text
     for btn in form.find_all(["button", "input"]):
         btn_text = (btn.get_text() + " " + (btn.get("value") or "")).lower()
         if any(kw in btn_text for kw in _SUBMIT_KEYWORDS):
             score += 0.1
             break
 
-    # ARIA labels inside form
+    #ARIA labels inside form
     aria_combined = " ".join(
         (el.get("aria-label") or "") for el in form.find_all(True)
     ).lower()
@@ -151,33 +149,33 @@ def _score_formless(soup: BeautifulSoup) -> tuple[float, list[str], str | None]:
         (i.get("autocomplete") or "").lower() for i in all_inputs
     ]
 
-    # Password input anywhere on page
+    #Password input anywhere on page
     if "password" in input_types or "current-password" in autocompletes:
         score += 0.4
         fields.append("password")
 
-    # Username/email input
+    #Username/email input
     for inp in all_inputs:
         if _input_is_username(inp):
             score += 0.2
             fields.append("username_or_email")
             break
 
-    # Page heading says "sign in" / "log in"
+    #Page heading says "sign in" / "log in"
     for tag in soup.find_all(["h1", "h2", "h3"]):
         text = tag.get_text().lower().strip()
         if any(kw in text for kw in _HEADING_KEYWORDS):
             score += 0.25
             break
 
-    # Button or link with auth text
+    #Button or link with auth text
     for btn in soup.find_all(["button", "a"]):
         btn_text = btn.get_text().lower().strip()
         if any(kw in btn_text for kw in _SUBMIT_KEYWORDS):
             score += 0.1
             break
 
-    # data-testid attributes with login keywords
+    #data-testid attributes with login keywords
     for el in soup.find_all(True, attrs={"data-testid": True}):
         testid = (el.get("data-testid") or "").lower()
         if any(kw in testid for kw in _FORM_ID_KEYWORDS):
@@ -235,7 +233,6 @@ def detect(html: str) -> HeuristicResult:
         result.detected_fields = best_fields
         result.form_action = best_action
         result.candidate_count = len(scored)
-        # Fix: only set snippet when auth is actually found
         result.html_snippet = _clean_snippet(best_form) if result.found else None
 
         if len(scored) > 1 and (scored[0][0] - scored[1][0]) < 0.15:
@@ -252,8 +249,6 @@ def detect(html: str) -> HeuristicResult:
         result.confidence = score
         result.detected_fields = fields
         result.low_confidence_reason = "no_form_tags_spa_pattern"
-
-        # Fix: only build snippet when auth is actually found
         if result.found:
             anchor = None
             for inp in soup.find_all("input"):
@@ -261,7 +256,6 @@ def detect(html: str) -> HeuristicResult:
                     anchor = inp
                     break
             if anchor:
-                # Walk up to find a meaningful container (up to 3 levels)
                 node = anchor
                 for _ in range(3):
                     if node.parent and node.parent.name not in ("body", "html", "[document]"):

@@ -59,11 +59,11 @@ def _needs_headless(h: heuristic.HeuristicResult, static_error: str | None, url:
     if h.low_confidence_reason == "no_forms_found":
         return _url_looks_like_login(url)
 
-    # SPA pattern — headless may render the full login form
+
     if h.low_confidence_reason == "no_form_tags_spa_pattern":
         return True
 
-    # Ambiguous multiple forms — headless may clarify
+   
     if h.low_confidence_reason == "ambiguous_multiple_forms":
         return True
 

@@ -19,7 +19,7 @@ WHAT COUNTS AS A LOGIN FORM:
 CRITICAL RULES:
 1. Never infer fields that are not explicitly present in the HTML. If <input type="password"> is absent, set "found": false unless a clearly labeled login form with a username field is present.
 2. Only include a field in "detected_fields" if you can cite the exact HTML attribute that proves it.
-3. Confidence scoring: use 0.8–1.0 only when both a password input AND a username/email input are present. Use 0.4–0.7 when only one is present. Use below 0.4 when you are uncertain.
+3. Confidence scoring: use 0.8-1.0 only when both a password input AND a username/email input are present. Use 0.4–0.7 when only one is present. Use below 0.4 when you are uncertain.
 
 Respond in JSON only with this exact structure:
 {
@@ -58,7 +58,7 @@ async def detect_with_llm(
     
     # 5. Apply the token-saving cutoff to the cleaned content
     trimmed_html = cleaned_html[:8000]
-    # --- End HTML Cleanup ---
+  
 
     hint_text = ""
     if heuristic_hint.low_confidence_reason:
